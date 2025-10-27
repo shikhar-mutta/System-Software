@@ -44,7 +44,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_1
+### P_1
 #### ITIMER_REAL, ITIMER_VIRTUAL, ITIMER_PROF
 **Purpose:** Demonstrate interval timers with `setitimer()` and the signals they generate (`SIGALRM`, `SIGVTALRM`, `SIGPROF`).  
 **Key funcs:** `setitimer()`, `signal()`/handler, `struct itimerval`.  
@@ -53,7 +53,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_2
+### P_2
 #### Query resource limits with `getrlimit`
 **Purpose:** Fetch process soft & hard resource limits.  
 **Key funcs:** `getrlimit(resource, &limit)`, `struct rlimit`, `RLIM_INFINITY`, conditional `#ifdef` checks (e.g., `RLIMIT_NICE`).  
@@ -62,7 +62,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_3
+### P_3
 #### Modify resource limits with `setrlimit`
 **Purpose:** Show changing resource limits (example: `RLIMIT_NOFILE`).  
 **Key funcs:** `getrlimit()`, modify `limit.rlim_cur`, and `setrlimit()`.  
@@ -71,7 +71,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_4
+### P_4
 #### `__rdtsc()`
 **Purpose:** Read CPU timestamp counter.  
 **Key funcs:** `__rdtsc()` intrinsic.  
@@ -80,7 +80,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_5
+### P_5
 #### `sysconf()` and feature-checking
 **Purpose:** Query runtime configuration values like `_SC_AVPHYS_PAGES`.  
 **Key funcs:** `sysconf(name_const)`, use `#ifdef` to compile conditionally.  
@@ -89,7 +89,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_6
+### P_6
 #### pthread creation & join
 **Purpose:** Create worker threads and synchronize them via `pthread_join()`.  
 **Key funcs:** `pthread_create()`, `pthread_join()`, `pthread_self()`.  
@@ -98,7 +98,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_7
+### P_7
 #### `pthread_self()`
 **Purpose:** Retrieve the calling thread's ID.  
 **Key funcs:** `pthread_self()`.  
@@ -106,7 +106,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_8
+### P_8
 #### Signal handling demo + fault-trigger helpers
 **Purpose:** Comprehensive signal demo with helpers to trigger `SIGSEGV`, `SIGFPE`, and timer tests using `alarm()` & `setitimer()`.  
 **Key funcs:** `signal()`, `_exit()`, `strsignal()`, busy loops for `ITIMER_VIRTUAL`/`ITIMER_PROF`.  
@@ -115,14 +115,14 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_9
+### P_9
 #### Ignore / restore SIGINT
 **Purpose:** Show `signal(SIGINT, SIG_IGN)` and `signal(SIGINT, SIG_DFL)` usage.  
 **Illustrates:** Temporarily disabling Ctrl-C and restoring default terminal behavior.
 
 ---
 
-### # P_10
+### P_10
 #### Advanced `sigaction()` sample
 **Purpose:** Install handlers using `sigaction()` with `SA_SIGINFO` and print `siginfo_t` details.  
 **Key funcs:** `sigaction()`, `memset()`, `sa.sa_flags = SA_SIGINFO`.  
@@ -131,41 +131,41 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_11
+### P_11
 #### Ignore and restore SIGINT using `sigaction`
 **Purpose:** Temporary ignore `SIGINT` then restore default via `sigaction`.  
 **Behavior:** Program ignores Ctrl-C for a short period, then restores normal termination on Ctrl-C.
 
 ---
 
-### # P_12
+### P_12
 #### Orphan process (child kills parent)
 **Purpose:** Show reparenting: child sends `SIGKILL` to parent; child remains running and becomes reparented to `init/systemd`.  
 **Key funcs:** `fork()`, `kill()`, `getpid()`, `getppid()`.
 
 ---
 
-### # P_13
+### P_13
 #### SIGSTOP cannot be caught; SIGCONT can
 **Purpose:** Two-program demo: catcher cannot install handler for `SIGSTOP` (error), but handles `SIGCONT`; sender sends `SIGSTOP` then `SIGCONT`.  
 **Illustrates:** Which signals are uncatchable and use of `kill()` for interprocess control.
 
 ---
 
-### # P_14
+### P_14
 #### Anonymous pipe demo (parent → child)
 **Purpose:** Parent writes a message to a pipe; child reads and displays it.  
 **Key funcs:** `pipe()`, `fork()`, `write()`, `read()`.
 
 ---
 
-### # P_15
+### P_15
 #### Parent → child one-way pipe
 **Purpose:** Simple parent-to-child message transfer over a pipe; correct closing of unused ends illustrated.
 
 ---
 
-### # P_16
+### P_16
 #### Two-way pipes (full-duplex with two pipes)
 **Purpose:** Bidirectional parent-child communication using two pipes and robust `read_all`/`write_all` helpers.  
 **Behavior:** Parent sends message; child replies; both print received messages.  
@@ -173,7 +173,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_17
+### P_17
 #### `ls -l | wc` via `dup()`, `dup2()`, and `fcntl(F_DUPFD)`
 **Purpose:** Implement the `ls -l | wc` pipeline using three methods of duplicating file descriptors.  
 **Key funcs:** `pipe()`, `dup()`, `dup2()`, `fcntl(F_DUPFD)`, `execlp()`.  
@@ -182,7 +182,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_18
+### P_18
 #### Multi-stage pipeline `ls -l | grep ^-rwx | wc` (uses `dup2`)
 **Purpose:** Chain three commands using two pipes and `dup2()`.  
 **Behavior:** `ls -l` → `grep ^-rwx` → `wc`.  
@@ -190,7 +190,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_19
+### P_19
 #### FIFO creation: `mknod` vs `mkfifo` (and `strace` comparison)
 **Purpose:** Create named pipes (FIFOs) via different methods and compare syscalls.  
 **Key funcs:** `mknod()`, `mkfifo()`, `strace` for syscall tracing.  
@@ -199,7 +199,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_20
+### P_20
 #### FIFO one-way comm (writer `20w.c` / reader `20r.c`)
 **Purpose:** One-way inter-process comm using a named FIFO.  
 **Behavior:** Writer creates FIFO and writes lines; reader opens and prints them until writer closes FIFO.  
@@ -207,7 +207,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_21
+### P_21
 #### Two-way FIFO chat (server/client) using `poll()`
 **Purpose:** Full-duplex chat between server and client using two FIFOs and `poll()` for multiplexing.  
 **Behavior:** Both sides can send/receive messages; typing `exit` closes the connection.  
@@ -215,7 +215,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_22
+### P_22
 #### Wait on FIFO with `select()` and timeout (10s)
 **Purpose:** Use `select()` to wait for data on a FIFO with a 10-second timeout.  
 **Files:** `22r.c` (reader), `22w.c` (writer).  
@@ -224,7 +224,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_23
+### P_23
 #### File descriptor limits & pipe buffer size
 **Purpose:** Print `RLIMIT_NOFILE` soft/hard limits and a pipe's default buffer size using `F_GETPIPE_SZ`.  
 **Key funcs:** `getrlimit()`, `pipe()`, `fcntl()`.  
@@ -232,28 +232,28 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_24
+### P_24
 #### Create System V message queue and print key/id
 **Purpose:** Use `ftok()` + `msgget()` to create/access a System V message queue and display its key and ID.  
 **Illustrates:** Basic System V message queue creation.
 
 ---
 
-### # P_25
+### P_25
 #### Inspect message queue metadata (`msqid_ds`)
 **Purpose:** Query `msgctl(..., IPC_STAT, ...)` to print permissions, uid/gid, last send/receive times, size, message count, etc.  
 **Illustrates:** Reading kernel-maintained IPC metadata.
 
 ---
 
-### # P_26
+### P_26
 #### Send messages to System V message queue (`msgsnd`)
 **Purpose:** Interactive sender that writes typed lines into a message queue; use `ipcs -q` to verify.  
 **Illustrates:** Message queuing and persistence across processes.
 
 ---
 
-### # P_27
+### P_27
 #### Receive from message queue (blocking and `IPC_NOWAIT`)
 **Purpose:** Interactive receiver demonstrating blocking (`flags=0`) and non-blocking (`IPC_NOWAIT`) `msgrcv`.  
 **Files:** `27s.c` (sender), `27r.c` (receiver).  
@@ -261,21 +261,21 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_28
+### P_28
 #### Change message queue permissions (`msgctl IPC_SET`)
 **Purpose:** Modify `msg_perm.mode` via `msgctl(..., IPC_SET, ...)` to change queue permissions (example: set to `0644`).  
 **Illustrates:** IPC attribute modification via `msgctl`.
 
 ---
 
-### # P_29
+### P_29
 #### Remove message queue interactively
 **Purpose:** List existing queues (`ipcs -q`) and remove selected `msqid` after user confirmation using `msgctl(IPC_RMID)`.  
 **Illustrates:** Safe IPC cleanup.
 
 ---
 
-### # P_30
+### P_30
 #### Shared memory lifecycle & read-only attach test
 **Purpose:** Create shared memory, write data, have child attach read-only and attempt to write (causes SIGSEGV), detach and remove the segment.  
 **Key funcs:** `shmget()`, `shmat()`, `shmdt()`, `shmctl(IPC_RMID)`.  
@@ -283,7 +283,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_31
+### P_31
 #### Create binary and counting semaphores (System V)
 **Purpose:** Create semaphores and initialize values (binary = 1, counting = 3).  
 **Key funcs:** `semget()`, `semctl(..., SETVAL)`.  
@@ -291,7 +291,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_32
+### P_32
 #### Semaphore-based synchronization examples
 **Purpose:** Demonstrate:
 - (a) Ticket generation protected by mutex semaphore.
@@ -303,14 +303,14 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 
 ---
 
-### # P_33
+### P_33
 #### Two-way TCP chat using sockets & `select()`
 **Purpose:** Server (`33s.c`) and client (`33c.c`) that exchange messages using TCP; `select()` handles stdin and socket.  
 **Illustrates:** Full-duplex TCP, `select()` multiplexing, and basic client-server model.
 
 ---
 
-### # P_34
+### P_34
 #### Concurrent TCP server: fork and pthread modes
 **Purpose:** Server (`34s.c`) supports two concurrency modes: fork-per-client and thread-per-client; client (`34c.c`) connects and receives echoes.  
 **Illustrates:** Process-based vs thread-based concurrency, per-connection handling, and echo server behavior.
