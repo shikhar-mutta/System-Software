@@ -29,7 +29,7 @@ Each `P_x` entry follows a consistent structure: **Purpose**, **Key functions / 
 20. [P_20 — FIFO one-way comm: writer (`20w.c`) and reader (`20r.c`)](#p_20)
 21. [P_21 — Two-way FIFO chat (server/client) with `poll()`](#p_21)
 22. [P_22 — Wait on FIFO with `select()` and timeout (10s)](#p_22)
-23. [P_23 — `getrlimit(RLIMIT_NOFILE)` and pipe (circular buffer) size via `F_GETPIPE_SZ`] (#p_23)
+23. [P_23 — `getrlimit(RLIMIT_NOFILE)` and pipe (circular buffer) size via `F_GETPIPE_SZ`](#p_23)
 24. [P_24 — Create System V message queue and print key/id](#p_24)
 25. [P_25 — Inspect message queue metadata (`msqid_ds` / `ipc_perm`)](#p_25)
 26. [P_26 — Send messages to System V message queue (`msgsnd`)](#p_26)
