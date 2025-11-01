@@ -11,13 +11,26 @@ c:
 	$(MAKE) -C server clean
 	$(MAKE) -C client clean
 
+clean:
+	@echo "🧹 Cleaning up..."
+	$(MAKE) -C server clean
+	$(MAKE) -C client clean
+
 # run-server:
 rs:
 	@echo "🚀 Launching Server..."
 	$(MAKE) -C server run
 
+run-server:
+	@echo "🚀 Launching Server..."
+	$(MAKE) -C server run
+
 # run-client:
 rc:
+	@echo "🚀 Launching Client..."
+	$(MAKE) -C client run
+
+run-client:
 	@echo "🚀 Launching Client..."
 	$(MAKE) -C client run
 
