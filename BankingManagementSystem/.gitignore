@@ -1,0 +1,19 @@
+# Ignore compiled object files
+*.o
+
+# Ignore other temporary build files
+*.out
+*.log
+*.tmp
+
+# Ignore build directories if any
+/build/
+bin/
+obj/
+
+# OS-specific ignores
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

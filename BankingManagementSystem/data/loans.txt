@@ -1,0 +1,8 @@
+L1761784919 1001 John 1000.00 approved Personal 2001 0000
+1761786150 1001 John 1000.00 pending perosnal 0000 0000
+L1761786184 1001 Jane 1000.00 pending Personal 0000 0000
+L1761921574 1001 John 1000.00 pending qw 0000 0000
+L1761958527 1004 John 1000.00 pending Noth 2001 0000
+
+
+&loan_id, &custname &cust_id, &amount, status, &reason, &assigned_emp_id = 0000, &approved_emp_id =0000
