@@ -30,7 +30,22 @@ void trimInput(char *str)
         memmove(str, str + start, strlen(str + start) + 1);
 }
 
-// Safe send wrapper
+// Safe send wrapper - returns 0 on failure (socket closed), 1 on success
+static int safe_send_check(int fd, const char *msg)
+{
+    if (!msg)
+        return 1;
+    ssize_t sent = send(fd, msg, strlen(msg), 0);
+    if (sent < 0)
+    {
+        // Socket closed or error
+        if (errno == EPIPE || errno == ECONNRESET)
+            return 0; // Socket closed
+    }
+    return 1; // Success
+}
+
+// Safe send wrapper (for backward compatibility - ignores return value)
 static void safe_send(int fd, const char *msg)
 {
     if (msg)
@@ -579,11 +594,26 @@ void handleCustomerMenu(int client_fd, const int userId, const char *username)
                  "--------------------------------------------\n"
                  "Enter command: ",
                  username);
-        safe_send(client_fd, msg);
+        if (!safe_send_check(client_fd, msg))
+        {
+            // Socket closed (client disconnected)
+            printf("❌ %s disconnected (socket closed).\n", username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
+            return;
+        }
 
         memset(buffer, 0, MAX);
         if (read(client_fd, buffer, MAX) <= 0)
-            break;
+        {
+            // Client disconnected (e.g., Ctrl+C)
+            printf("❌ %s disconnected.\n", username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
+            return;
+        }
         trimInput(buffer);
         if (strlen(buffer) == 0)
             continue;
@@ -639,7 +669,14 @@ void handleCustomerMenu(int client_fd, const int userId, const char *username)
             safe_send(client_fd, "Enter recipient ID: ");
             memset(buffer, 0, MAX);
             if (safe_read_line(client_fd, buffer, MAX) <= 0)
+            {
+                // Client disconnected
+                printf("❌ %s disconnected.\n", username);
+                char userIdStr[32];
+                snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+                removeSession(userIdStr);
                 return; // handle disconnect or invalid input
+            }
 
             trimInput(buffer);
             int recipientId = atoi(buffer);
@@ -690,7 +727,11 @@ void handleCustomerMenu(int client_fd, const int userId, const char *username)
             safe_send(client_fd, msg);
         }
         else if (strcmp(buffer, "5") == 0 || strcasecmp(buffer, "myloans") == 0)
+        {
             showCustomerLoans(client_fd, username, userId);
+            // Continue to next iteration to show menu immediately
+            continue;
+        }
         else if (strcmp(buffer, "6") == 0 || strcasecmp(buffer, "applyloan") == 0)
         {
             safe_send(client_fd, "Enter loan amount: ");
@@ -757,13 +798,17 @@ void handleCustomerMenu(int client_fd, const int userId, const char *username)
         else if (strcmp(buffer, "10") == 0 || strcasecmp(buffer, "logout") == 0)
         {
             safe_send(client_fd, "👋 Logged out successfully. Returning to login page...\n");
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             return;
         }
         else if (strcmp(buffer, "11") == 0 || strcasecmp(buffer, "exit") == 0)
         {
             safe_send(client_fd, "👋 Exiting program.\n 👋Good bye!\n");
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             close(client_fd);
             exit(0);
         }

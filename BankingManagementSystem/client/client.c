@@ -19,16 +19,6 @@ static int global_sock = -1;
 static char userId[64] = ""; // Store user ID globally
 
 // ----------------------------------------------------------------------
-// 📨 Simple safe_send for client
-// ----------------------------------------------------------------------
-static void safe_send(int fd, const char *msg)
-{
-    if (fd < 0 || !msg)
-        return;
-    send(fd, msg, strlen(msg), 0);
-}
-
-// ----------------------------------------------------------------------
 // 🧹 Graceful exit on Ctrl+C
 // ----------------------------------------------------------------------
 void handle_sigint(int sig)
@@ -40,8 +30,8 @@ void handle_sigint(int sig)
 
     if (global_sock != -1)
     {
-        safe_send(global_sock, "👋 Exiting program.\n 👋Good bye!\n");
-        // Clients don't manage sessions directly, so skip removeSession()
+        // Close socket immediately to trigger server disconnect detection
+        // This ensures the server removes the session from sessions.txt
         shutdown(global_sock, SHUT_RDWR);
         close(global_sock);
         global_sock = -1;

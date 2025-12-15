@@ -3,10 +3,21 @@
 
 #include "common.h"
 
+// ---------------------
+// Employee Management
+// ---------------------
 int addEmployee(const char *username, const char *password, const char *role);
-int modifyUserDetails(const char *filename, const char *username, const char *newPass);
+int modifyUserDetailsById(const char *filename, int userId, const char *newPass);
 int changeUserRole(int client_fd, int userId, const char *newRole);
+
+// ---------------------
+// Password Management
+// ---------------------
 int changeAdminPassword(int adminId, const char *oldPass, const char *newPass);
+
+// ---------------------
+// Admin Menu Handler
+// ---------------------
 void handleAdminMenu(int client_fd, const int userId, const char *displayName);
 
 #endif

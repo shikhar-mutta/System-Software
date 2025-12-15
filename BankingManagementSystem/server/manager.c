@@ -99,72 +99,137 @@ int changeManagerPassword(int userId, const char *oldPass, const char *newPass)
     if (userId <= 0 || !oldPass || !newPass || strlen(newPass) == 0)
         return 0;
 
-    FILE *fp = fopen(EMPLOYEE_FILE, "r+");
+    FILE *fp = fopen(EMPLOYEE_FILE, "r");
     if (!fp)
         return 0;
 
-    int id, changed = 0;
-    char uname[64], pass[64], role[32];
-    long pos;
-
-    // Optional: lock file to prevent race conditions
-    int fd = fileno(fp);
-    flock(fd, LOCK_EX);
-
-    while ((pos = ftell(fp)),
-           fscanf(fp, "%d %63s %63s %31s", &id, uname, pass, role) == 4)
+    typedef struct
     {
-        if (id == userId && strcmp(pass, oldPass) == 0 && strcmp(role, "manager") == 0)
-        {
-            fseek(fp, pos, SEEK_SET);
-            fprintf(fp, "%-5d %-15s %-15s %-10s\n", id, uname, newPass, role);
-            fflush(fp);
-            changed = 1;
-            break;
-        }
-    }
+        int id;
+        char uname[64];
+        char pass[64];
+        char role[32];
+    } Emp;
 
-    flock(fd, LOCK_UN);
+    Emp employees[500];
+    int count = 0;
+    int changed = 0;
+
+    // Read all employees
+    while (count < 500 && fscanf(fp, "%d %63s %63s %31s",
+                                 &employees[count].id,
+                                 employees[count].uname,
+                                 employees[count].pass,
+                                 employees[count].role) == 4)
+    {
+        if (employees[count].id == userId && 
+            strcmp(employees[count].pass, oldPass) == 0 && 
+            strcmp(employees[count].role, "manager") == 0)
+        {
+            // Update password
+            strncpy(employees[count].pass, newPass, sizeof(employees[count].pass) - 1);
+            employees[count].pass[sizeof(employees[count].pass) - 1] = '\0';
+            changed = 1;
+        }
+        count++;
+    }
     fclose(fp);
+
+    if (!changed)
+        return 0;
+
+    // Write all employees back with proper formatting (same format as addEmployee)
+    fp = fopen(EMPLOYEE_FILE, "w");
+    if (!fp)
+        return 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        fprintf(fp, "%d %s %s %s\n",
+                employees[i].id,
+                employees[i].uname,
+                employees[i].pass,
+                employees[i].role);
+    }
+    fclose(fp);
+
     return changed;
 }
 
 // =========================================================
 // ⚙️ Activate / Deactivate Customer Account (by ID)
 // =========================================================
-int setCustomerStatus(int custId, const char *newStatus)
+int setCustomerStatus(int custId, const char *newStatus, char *outCustomerName, size_t nameLen, char *outStatus, size_t statusLen)
 {
     if (custId <= 0 || !newStatus || strlen(newStatus) == 0)
         return 0;
 
-    FILE *fp = fopen(CUSTOMER_FILE, "r+");
+    FILE *fp = fopen(CUSTOMER_FILE, "r");
     if (!fp)
         return 0;
 
-    int id, changed = 0;
-    float bal;
-    char uname[64], pass[64], status[16];
-    long pos;
-
-    int fd = fileno(fp);
-    flock(fd, LOCK_EX); // optional safety lock
-
-    while ((pos = ftell(fp)),
-           fscanf(fp, "%d %63s %63s %f %15s", &id, uname, pass, &bal, status) == 5)
+    typedef struct
     {
-        if (id == custId)
-        {
-            fseek(fp, pos, SEEK_SET);
-            fprintf(fp, "%-5d %-15s %-15s %-10.2f %-10s\n",
-                    id, uname, pass, bal, newStatus);
-            fflush(fp);
-            changed = 1;
-            break;
-        }
-    }
+        int id;
+        char uname[64];
+        char pass[64];
+        float bal;
+        char status[16];
+    } Cust;
 
-    flock(fd, LOCK_UN);
+    Cust customers[500];
+    int count = 0;
+    int changed = 0;
+
+    // Read all customers
+    while (count < 500 && fscanf(fp, "%d %63s %63s %f %15s",
+                                 &customers[count].id,
+                                 customers[count].uname,
+                                 customers[count].pass,
+                                 &customers[count].bal,
+                                 customers[count].status) == 5)
+    {
+        if (customers[count].id == custId)
+        {
+            // Store customer name and new status for success message
+            if (outCustomerName && nameLen > 0)
+            {
+                strncpy(outCustomerName, customers[count].uname, nameLen - 1);
+                outCustomerName[nameLen - 1] = '\0';
+            }
+            if (outStatus && statusLen > 0)
+            {
+                strncpy(outStatus, newStatus, statusLen - 1);
+                outStatus[statusLen - 1] = '\0';
+            }
+            // Update status
+            strncpy(customers[count].status, newStatus, sizeof(customers[count].status) - 1);
+            customers[count].status[sizeof(customers[count].status) - 1] = '\0';
+            changed = 1;
+        }
+        count++;
+    }
     fclose(fp);
+
+    if (!changed)
+        return 0;
+
+    // Write all customers back with proper formatting (same format as other modules)
+    fp = fopen(CUSTOMER_FILE, "w");
+    if (!fp)
+        return 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        fprintf(fp, "%d %s %s %.2f %s\n",
+                customers[i].id,
+                customers[i].uname,
+                customers[i].pass,
+                customers[i].bal,
+                customers[i].status);
+    }
+    fclose(fp);
+
     return changed;
 }
 
@@ -360,7 +425,9 @@ void handleManagerMenu(int client_fd, const int userId, const char *username)
         if (read_line(client_fd, buf, sizeof(buf)) <= 0)
         {
             printf("❌ %s disconnected.\n", username);
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             close(client_fd);
             return;
         }
@@ -385,11 +452,42 @@ void handleManagerMenu(int client_fd, const int userId, const char *username)
             read_line(client_fd, buf, sizeof(buf));
             trim(buf);
 
-            const char *newStatus = buf;
+            // Normalize status input: accept "i"/"inactive" or "a"/"active" (case-insensitive)
+            char normalizedStatus[16] = {0};
+            if (strcasecmp(buf, "i") == 0 || strcasecmp(buf, "inactive") == 0)
+            {
+                strcpy(normalizedStatus, "inactive");
+            }
+            else if (strcasecmp(buf, "a") == 0 || strcasecmp(buf, "active") == 0)
+            {
+                strcpy(normalizedStatus, "active");
+            }
+            else
+            {
+                // If input doesn't match, use as-is but validate
+                if (strlen(buf) > 0)
+                    strncpy(normalizedStatus, buf, sizeof(normalizedStatus) - 1);
+                else
+                {
+                    safe_send(client_fd, "❌ Invalid status. Please enter 'active' or 'inactive'.\n");
+                    continue;
+                }
+            }
 
-            int result = setCustomerStatus(custId, newStatus);
+            char customerName[64] = {0};
+            char customerStatus[16] = {0};
+            int result = setCustomerStatus(custId, normalizedStatus, customerName, sizeof(customerName), customerStatus, sizeof(customerStatus));
             if (result)
-                safe_send(client_fd, "✅ Customer status updated successfully.\n");
+            {
+                char successMsg[256];
+                snprintf(successMsg, sizeof(successMsg),
+                         "✅ Customer status updated successfully.\n"
+                         "   Customer ID: %d\n"
+                         "   Customer Name: %s\n"
+                         "   Status: %s\n",
+                         custId, customerName, customerStatus);
+                safe_send(client_fd, successMsg);
+            }
             else
                 safe_send(client_fd, "❌ Failed to update customer status (ID not found).\n");
         }
@@ -455,13 +553,17 @@ void handleManagerMenu(int client_fd, const int userId, const char *username)
         else if (strcmp(buf, "6") == 0 || strcasecmp(buf, "logout") == 0)
         {
             safe_send(client_fd, "👋 Logged out successfully. Returning to login page...\n");
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             return;
         } // === Option 7: Exit ===
         else if (strcmp(buf, "7") == 0 || strcasecmp(buf, "exit") == 0)
         {
             safe_send(client_fd, "👋 Exiting program.\n 👋Good bye!\n");
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             close(client_fd);
             exit(0);
         }

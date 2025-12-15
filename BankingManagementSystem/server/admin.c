@@ -65,8 +65,17 @@ static inline void sync_delay() { usleep(20000); }
 // =========================================================
 int addEmployee(const char *username, const char *password, const char *role)
 {
-    if (!username || !password || !role || strlen(username) == 0 || strlen(password) == 0)
+    if (!username || !password || !role || 
+        strlen(username) == 0 || strlen(password) == 0 || strlen(role) == 0)
         return 0;
+    
+    // Validate role is one of the allowed values
+    if (strcmp(role, "employee") != 0 && 
+        strcmp(role, "manager") != 0 && 
+        strcmp(role, "admin") != 0)
+    {
+        return 0; // Invalid role
+    }
 
     FILE *fp = fopen(EMPLOYEE_FILE, "a+");
     if (!fp)
@@ -88,17 +97,24 @@ int addEmployee(const char *username, const char *password, const char *role)
 
     rewind(fp); // start reading from the beginning
 
-    int lastId;
+    int lastId = 2000; // Start from 2000 for employee IDs if file is empty
     int id;
     char name[64], pass[64], empRole[64];
 
-    // 🔍 Read all employees to find last used ID
-    while (fscanf(fp, "%d %63s %63s %63s", &id, name, pass, empRole) == 4)
-        lastId = id;
+    // 🔍 Read all employees to find last used ID (skip malformed lines)
+    char line[256];
+    while (fgets(line, sizeof(line), fp))
+    {
+        if (sscanf(line, "%d %63s %63s %63s", &id, name, pass, empRole) == 4)
+        {
+            if (id > lastId)
+                lastId = id;
+        }
+    }
 
     int newId = lastId + 1;
 
-    // ✏️ Append new employee entry
+    // ✏️ Append new employee entry with proper formatting
     fprintf(fp, "%d %s %s %s\n", newId, username, password, role);
     fflush(fp);
     fsync(fd); // ensure data is physically written
@@ -121,51 +137,115 @@ int modifyUserDetailsById(const char *filename, int userId, const char *newPass)
     if (!filename || !newPass)
         return 0;
 
-    FILE *fp = fopen(filename, "r+");
+    FILE *fp = fopen(filename, "r");
     if (!fp)
         return 0;
 
-    int id;
-    char uname[64], pass[64], role[32], status[32];
-    float bal;
-    long pos;
     int updated = 0;
+    int isCustomerFile = (strstr(filename, "customers") != NULL);
 
-    while ((pos = ftell(fp)), 1)
+    if (isCustomerFile)
     {
-        // Customer file
-        if (strstr(filename, "customers"))
+        // Customer file format: ID username password balance status
+        typedef struct
         {
-            if (fscanf(fp, "%d %63s %63s %f %31s", &id, uname, pass, &bal, status) != 5)
-                break;
-            if (id == userId)
-            {
-                fseek(fp, pos, SEEK_SET);
-                fprintf(fp, "%-5d %-10s %-10s %-10.2f %-10s\n",
-                        id, uname, newPass, bal, status);
-                fflush(fp);
-                updated = 1;
-                break;
-            }
-        }
-        // Employee file
-        else
+            int id;
+            char uname[64];
+            char pass[64];
+            float bal;
+            char status[32];
+        } Cust;
+
+        Cust customers[500];
+        int count = 0;
+
+        // Read all customers
+        while (count < 500 && fscanf(fp, "%d %63s %63s %f %31s",
+                                     &customers[count].id,
+                                     customers[count].uname,
+                                     customers[count].pass,
+                                     &customers[count].bal,
+                                     customers[count].status) == 5)
         {
-            if (fscanf(fp, "%d %63s %63s %31s", &id, uname, pass, role) != 4)
-                break;
-            if (id == userId)
+            if (customers[count].id == userId)
             {
-                fseek(fp, pos, SEEK_SET);
-                fprintf(fp, "%-5d %-10s %-10s %-10s\n",
-                        id, uname, newPass, role);
-                fflush(fp);
+                strncpy(customers[count].pass, newPass, sizeof(customers[count].pass) - 1);
+                customers[count].pass[sizeof(customers[count].pass) - 1] = '\0';
                 updated = 1;
-                break;
             }
+            count++;
         }
+        fclose(fp);
+
+        if (!updated)
+            return 0;
+
+        // Write all customers back
+        fp = fopen(filename, "w");
+        if (!fp)
+            return 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            fprintf(fp, "%d %s %s %.2f %s\n",
+                    customers[i].id,
+                    customers[i].uname,
+                    customers[i].pass,
+                    customers[i].bal,
+                    customers[i].status);
+        }
+        fclose(fp);
+    }
+    else
+    {
+        // Employee file format: ID username password role
+        typedef struct
+        {
+            int id;
+            char uname[64];
+            char pass[64];
+            char role[32];
+        } Emp;
+
+        Emp employees[500];
+        int count = 0;
+
+        // Read all employees
+        while (count < 500 && fscanf(fp, "%d %63s %63s %31s",
+                                     &employees[count].id,
+                                     employees[count].uname,
+                                     employees[count].pass,
+                                     employees[count].role) == 4)
+        {
+            if (employees[count].id == userId)
+            {
+                strncpy(employees[count].pass, newPass, sizeof(employees[count].pass) - 1);
+                employees[count].pass[sizeof(employees[count].pass) - 1] = '\0';
+                updated = 1;
+            }
+            count++;
+        }
+        fclose(fp);
+
+        if (!updated)
+            return 0;
+
+        // Write all employees back
+        fp = fopen(filename, "w");
+        if (!fp)
+            return 0;
+
+        for (int i = 0; i < count; i++)
+        {
+            fprintf(fp, "%d %s %s %s\n",
+                    employees[i].id,
+                    employees[i].uname,
+                    employees[i].pass,
+                    employees[i].role);
+        }
+        fclose(fp);
     }
 
-    fclose(fp);
     return updated;
 }
 
@@ -177,44 +257,78 @@ int changeUserRole(int client_fd, int userId, const char *newRole)
     if (!newRole || strlen(newRole) == 0)
         return 0;
 
-    FILE *fp = fopen(EMPLOYEE_FILE, "r+");
+    FILE *fp = fopen(EMPLOYEE_FILE, "r");
     if (!fp)
     {
         safe_send(client_fd, "❌ Failed to access employee records.\n");
         return 0;
     }
 
-    int id, changed = 0;
-    char uname[64], pass[64], role[32];
-    long pos;
+    typedef struct
+    {
+        int id;
+        char uname[64];
+        char pass[64];
+        char role[32];
+    } Emp;
+
+    Emp employees[500];
+    int count = 0;
+    int changed = 0;
+    char oldRole[32] = {0};
     char msg[256];
 
-    while ((pos = ftell(fp)), fscanf(fp, "%d %63s %63s %31s", &id, uname, pass, role) == 4)
+    // Read all employees
+    while (count < 500 && fscanf(fp, "%d %63s %63s %31s",
+                                 &employees[count].id,
+                                 employees[count].uname,
+                                 employees[count].pass,
+                                 employees[count].role) == 4)
     {
-        if (id == userId)
+        if (employees[count].id == userId)
         {
-            fseek(fp, pos, SEEK_SET); // Move to the beginning of this record
-            fprintf(fp, "%-5d %-15s %-15s %-15s\n", id, uname, pass, newRole);
-            fflush(fp);
-
-            snprintf(msg, sizeof(msg),
-                     "✅ Role updated for Employee ID %d: %s → %s\n",
-                     userId, role, newRole);
-            safe_send(client_fd, msg);
-
+            strncpy(oldRole, employees[count].role, sizeof(oldRole) - 1);
+            oldRole[sizeof(oldRole) - 1] = '\0';
+            // Update role
+            strncpy(employees[count].role, newRole, sizeof(employees[count].role) - 1);
+            employees[count].role[sizeof(employees[count].role) - 1] = '\0';
             changed = 1;
-            break;
         }
+        count++;
     }
+    fclose(fp);
 
     if (!changed)
     {
         snprintf(msg, sizeof(msg),
                  "⚠️ Employee ID %d not found. No changes made.\n", userId);
         safe_send(client_fd, msg);
+        return 0;
     }
 
+    // Write all employees back with proper formatting (same format as addEmployee)
+    fp = fopen(EMPLOYEE_FILE, "w");
+    if (!fp)
+    {
+        safe_send(client_fd, "❌ Failed to write employee records.\n");
+        return 0;
+    }
+
+    for (int i = 0; i < count; i++)
+    {
+        fprintf(fp, "%d %s %s %s\n",
+                employees[i].id,
+                employees[i].uname,
+                employees[i].pass,
+                employees[i].role);
+    }
     fclose(fp);
+
+    snprintf(msg, sizeof(msg),
+             "✅ Role updated for Employee ID %d: %s → %s\n",
+             userId, oldRole, newRole);
+    safe_send(client_fd, msg);
+
     return changed;
 }
 
@@ -226,27 +340,60 @@ int changeAdminPassword(int adminId, const char *oldPass, const char *newPass)
     if (!oldPass || !newPass || strlen(newPass) == 0)
         return 0;
 
-    FILE *fp = fopen(EMPLOYEE_FILE, "r+");
+    FILE *fp = fopen(EMPLOYEE_FILE, "r");
     if (!fp)
         return 0;
 
-    int id, changed = 0;
-    char uname[64], pass[64], role[32];
-    long pos;
-
-    while ((pos = ftell(fp)), fscanf(fp, "%d %63s %63s %31s", &id, uname, pass, role) == 4)
+    typedef struct
     {
-        if (id == adminId && strcmp(pass, oldPass) == 0 && strcmp(role, "admin") == 0)
-        {
-            fseek(fp, pos, SEEK_SET);
-            fprintf(fp, "%-5d %-15s %-15s %-10s\n", id, uname, newPass, role);
-            fflush(fp);
-            changed = 1;
-            break;
-        }
-    }
+        int id;
+        char uname[64];
+        char pass[64];
+        char role[32];
+    } Emp;
 
+    Emp employees[500];
+    int count = 0;
+    int changed = 0;
+
+    // Read all employees
+    while (count < 500 && fscanf(fp, "%d %63s %63s %31s",
+                                 &employees[count].id,
+                                 employees[count].uname,
+                                 employees[count].pass,
+                                 employees[count].role) == 4)
+    {
+        if (employees[count].id == adminId && 
+            strcmp(employees[count].pass, oldPass) == 0 && 
+            strcmp(employees[count].role, "admin") == 0)
+        {
+            // Update password
+            strncpy(employees[count].pass, newPass, sizeof(employees[count].pass) - 1);
+            employees[count].pass[sizeof(employees[count].pass) - 1] = '\0';
+            changed = 1;
+        }
+        count++;
+    }
     fclose(fp);
+
+    if (!changed)
+        return 0;
+
+    // Write all employees back with proper formatting (same format as addEmployee)
+    fp = fopen(EMPLOYEE_FILE, "w");
+    if (!fp)
+        return 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        fprintf(fp, "%d %s %s %s\n",
+                employees[i].id,
+                employees[i].uname,
+                employees[i].pass,
+                employees[i].role);
+    }
+    fclose(fp);
+
     return changed;
 }
 
@@ -278,7 +425,9 @@ void handleAdminMenu(int client_fd, const int userId, const char *username)
         if (read_line(client_fd, buf, sizeof(buf)) <= 0)
         {
             printf("❌ %s disconnected.\n", username);
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             close(client_fd);
             return;
         }
@@ -303,10 +452,56 @@ void handleAdminMenu(int client_fd, const int userId, const char *username)
             read_line(client_fd, buf, sizeof(buf));
             trim(buf);
 
-            safe_send(client_fd,
-                      addEmployee(uname, pass, strlen(buf) > 0 ? buf : "employee")
-                          ? "✅ Employee added successfully.\n"
-                          : "❌ Failed to add employee.\n");
+            // Normalize role input: accept "employee"/"e" or "manager"/"m" (case-insensitive)
+            char normalizedRole[32] = {0};
+            if (strlen(buf) == 0)
+            {
+                // Default to employee if empty
+                strcpy(normalizedRole, "employee");
+            }
+            else if (strcasecmp(buf, "e") == 0 || strcasecmp(buf, "employee") == 0)
+            {
+                strcpy(normalizedRole, "employee");
+            }
+            else if (strcasecmp(buf, "m") == 0 || strcasecmp(buf, "manager") == 0)
+            {
+                strcpy(normalizedRole, "manager");
+            }
+            else
+            {
+                // Invalid input - reject and ask again
+                safe_send(client_fd, "❌ Invalid role. Please enter 'employee' or 'manager' (or 'e'/'m').\n");
+                continue;
+            }
+
+            // Validate username and password are not empty
+            if (strlen(uname) == 0)
+            {
+                safe_send(client_fd, "❌ Username cannot be empty.\n");
+                continue;
+            }
+            if (strlen(pass) == 0)
+            {
+                safe_send(client_fd, "❌ Password cannot be empty.\n");
+                continue;
+            }
+
+            int newEmployeeId = addEmployee(uname, pass, normalizedRole);
+            if (newEmployeeId > 0)
+            {
+                char successMsg[256];
+                snprintf(successMsg, sizeof(successMsg),
+                         "✅ Employee added successfully.\n"
+                         "   Employee ID: %d\n"
+                         "   Username: %s\n"
+                         "   Role: %s\n",
+                         newEmployeeId, uname, normalizedRole);
+                safe_send(client_fd, successMsg);
+            }
+            else
+            {
+                safe_send(client_fd, "❌ Failed to add employee.\n");
+            }
         }
 
         // 2 Modify Customer Password (by ID)
@@ -379,10 +574,33 @@ void handleAdminMenu(int client_fd, const int userId, const char *username)
             read_line(client_fd, buf, sizeof(buf));
             trim(buf);
 
-            safe_send(client_fd,
-                      changeUserRole(client_fd, empId, buf)
-                          ? "✅ Role updated successfully.\n"
-                          : "❌ Failed to change role.\n");
+            // Normalize role input: accept "employee"/"e", "manager"/"m", or "admin"/"a" (case-insensitive)
+            char normalizedRole[32] = {0};
+            if (strlen(buf) == 0)
+            {
+                safe_send(client_fd, "❌ Invalid role. Please enter 'employee', 'manager', or 'admin'.\n");
+                continue;
+            }
+            else if (strcasecmp(buf, "e") == 0 || strcasecmp(buf, "employee") == 0)
+            {
+                strcpy(normalizedRole, "employee");
+            }
+            else if (strcasecmp(buf, "m") == 0 || strcasecmp(buf, "manager") == 0)
+            {
+                strcpy(normalizedRole, "manager");
+            }
+            else if (strcasecmp(buf, "a") == 0 || strcasecmp(buf, "admin") == 0)
+            {
+                strcpy(normalizedRole, "admin");
+            }
+            else
+            {
+                // If input doesn't match, use as-is but show warning
+                strncpy(normalizedRole, buf, sizeof(normalizedRole) - 1);
+                normalizedRole[sizeof(normalizedRole) - 1] = '\0';
+            }
+
+            changeUserRole(client_fd, empId, normalizedRole);
         }
 
         // 5 Change Admin Password
@@ -410,7 +628,9 @@ void handleAdminMenu(int client_fd, const int userId, const char *username)
         else if (strcmp(buf, "6") == 0 || strcasecmp(buf, "logout") == 0)
         {
             safe_send(client_fd, "👋 Logged out successfully. Returning to login page...\n");
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             return;
         }
 
@@ -418,7 +638,9 @@ void handleAdminMenu(int client_fd, const int userId, const char *username)
         else if (strcmp(buf, "7") == 0 || strcasecmp(buf, "exit") == 0)
         {
             safe_send(client_fd, "👋 Exiting program.\n 👋Good bye!\n");
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             close(client_fd);
             exit(0);
         }

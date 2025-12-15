@@ -345,6 +345,13 @@ int main(void)
         {
             // --- CHILD PROCESS ---
             close(server_fd);
+            
+            // Enable keepalive to detect disconnections faster
+            int keepalive = 1;
+            setsockopt(client_fd, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
+
+            // Track current userId to remove session on exit
+            static char currentUserId[64] = {0};
 
             while (1)
             {
@@ -371,6 +378,10 @@ int main(void)
                 printf("👤 %s (%s) logged in successfully (fd=%d)\n",
                        displayName, userType, client_fd);
 
+                // Store userId for cleanup on exit
+                strncpy(currentUserId, userId, sizeof(currentUserId) - 1);
+                currentUserId[sizeof(currentUserId) - 1] = '\0';
+
                 if (strcmp(userType, "customer") == 0)
                     handleCustomerMenu(client_fd, atoi(userId), displayName);
                 else if (strcmp(userType, "employee") == 0)
@@ -383,11 +394,18 @@ int main(void)
                 // When dashboard returns, user has likely logged out (or session ended).
                 // remove their session (safe to call even if already removed).
                 removeSession(userId);
+                currentUserId[0] = '\0'; // Clear stored userId
 
                 // continue -> show login menu again
             }
 
             fprintf(stderr, "⚠️ Client (fd=%d) disconnected or exited.\n", client_fd);
+
+            // Remove session if still logged in (e.g., client terminated with Ctrl+C)
+            if (currentUserId[0] != '\0')
+            {
+                removeSession(currentUserId);
+            }
 
             // cleanup socket and exit child
             shutdown(client_fd, SHUT_RDWR);

@@ -177,32 +177,60 @@ int changeEmployeePassword(int employeeId, const char *oldPass, const char *newP
     if (employeeId <= 0 || !oldPass || !newPass)
         return 0;
 
-    FILE *fp = fopen(EMPLOYEE_FILE, "r+");
+    FILE *fp = fopen(EMPLOYEE_FILE, "r");
     if (!fp)
         return 0;
 
-    char line[256];
-    int id;
-    char uname[64], pass[64], role[32];
-    long pos;
-
-    while ((pos = ftell(fp)), fgets(line, sizeof(line), fp))
+    typedef struct
     {
-        if (sscanf(line, "%d %63s %63s %31s", &id, uname, pass, role) == 4)
-        {
-            if (id == employeeId && strcmp(pass, oldPass) == 0)
-            {
-                fseek(fp, pos, SEEK_SET); // go back to start of line
-                fprintf(fp, "%d %s %s %s\n", id, uname, newPass, role);
-                fflush(fp);
-                fclose(fp);
-                return 1; // ✅ password changed
-            }
-        }
-    }
+        int id;
+        char uname[64];
+        char pass[64];
+        char role[32];
+    } Emp;
 
+    Emp employees[500];
+    int count = 0;
+    int changed = 0;
+
+    // Read all employees
+    while (count < 500 && fscanf(fp, "%d %63s %63s %31s",
+                                 &employees[count].id,
+                                 employees[count].uname,
+                                 employees[count].pass,
+                                 employees[count].role) == 4)
+    {
+        if (employees[count].id == employeeId && 
+            strcmp(employees[count].pass, oldPass) == 0)
+        {
+            // Update password
+            strncpy(employees[count].pass, newPass, sizeof(employees[count].pass) - 1);
+            employees[count].pass[sizeof(employees[count].pass) - 1] = '\0';
+            changed = 1;
+        }
+        count++;
+    }
     fclose(fp);
-    return 0; // ❌ not found or old password mismatch
+
+    if (!changed)
+        return 0;
+
+    // Write all employees back with proper formatting (same format as addEmployee)
+    fp = fopen(EMPLOYEE_FILE, "w");
+    if (!fp)
+        return 0;
+
+    for (int i = 0; i < count; i++)
+    {
+        fprintf(fp, "%d %s %s %s\n",
+                employees[i].id,
+                employees[i].uname,
+                employees[i].pass,
+                employees[i].role);
+    }
+    fclose(fp);
+
+    return changed;
 }
 
 // =========================================================
@@ -375,7 +403,9 @@ int processLoan(const char *loan_id, const char *decision, int employee_id)
         if (parsed == 8 && strcmp(loanId, loan_id) == 0)
         {
             // 🧠 Verify assignment before allowing approval
-            if (strcasecmp(decision, "approved") == 0)
+            // Accept "approved", "a", or "A" as approved
+            if (strcasecmp(decision, "approved") == 0 || 
+                strcasecmp(decision, "a") == 0)
             {
                 if (assignedEmpId != employee_id)
                 {
@@ -546,7 +576,9 @@ void handleEmployeeMenu(int client_fd, const int userId, const char *username)
         if (read_line(client_fd, buf, sizeof(buf)) <= 0)
         {
             printf("❌ %s disconnected.\n", username);
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             close(client_fd);
             return;
         }
@@ -574,10 +606,22 @@ void handleEmployeeMenu(int client_fd, const int userId, const char *username)
             trim(buf);
             float bal = atof(buf);
 
-            safe_send(client_fd,
-                      addCustomer(uname, pass, bal)
-                          ? "✅ Customer added successfully.\n"
-                          : "❌ Failed to add customer.\n");
+            int newCustomerId = addCustomer(uname, pass, bal);
+            if (newCustomerId > 0)
+            {
+                char successMsg[256];
+                snprintf(successMsg, sizeof(successMsg),
+                         "✅ Customer added successfully.\n"
+                         "   Customer ID: %d\n"
+                         "   Username: %s\n"
+                         "   Initial Balance: ₹%.2f\n",
+                         newCustomerId, uname, bal);
+                safe_send(client_fd, successMsg);
+            }
+            else
+            {
+                safe_send(client_fd, "❌ Failed to add customer.\n");
+            }
         }
 
         // 2 Modify Customer (by ID)
@@ -724,7 +768,9 @@ void handleEmployeeMenu(int client_fd, const int userId, const char *username)
         else if (!strcmp(buf, "8") || !strcmp(buf, "logout"))
         {
             safe_send(client_fd, "👋 Logged out successfully. Returning to login page...\n");
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             return;
         }
 
@@ -732,7 +778,9 @@ void handleEmployeeMenu(int client_fd, const int userId, const char *username)
         else if (!strcmp(buf, "9") || !strcmp(buf, "exit"))
         {
             safe_send(client_fd, "👋 Exiting program.\n 👋Good bye!\n");
-            removeSession(username);
+            char userIdStr[32];
+            snprintf(userIdStr, sizeof(userIdStr), "%d", userId);
+            removeSession(userIdStr);
             close(client_fd);
             exit(0);
         }
