@@ -48,14 +48,30 @@ static int safe_send_check(int fd, const char *msg)
 // Safe send wrapper (for backward compatibility - ignores return value)
 static void safe_send(int fd, const char *msg)
 {
-    if (msg)
-        send(fd, msg, strlen(msg), 0);
+    if (msg && fd >= 0)
+    {
+        ssize_t sent = send(fd, msg, strlen(msg), 0);
+        if (sent < 0 && errno != EPIPE && errno != ECONNRESET)
+        {
+            // Log error but don't crash - connection might be closed
+            // errno will be set appropriately
+        }
+    }
 }
 ssize_t safe_read_line(int fd, char *buf, size_t max)
 {
+    if (!buf || max == 0 || fd < 0)
+        return -1;
+        
     ssize_t r = read(fd, buf, max - 1);
     if (r <= 0)
-        return r; // 0 = disconnected, -1 = error
+    {
+        if (r == 0)
+            return 0; // Disconnected
+        if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+            return -1; // Retry needed
+        return -1; // Error
+    }
 
     buf[r] = '\0';
 
@@ -69,13 +85,22 @@ ssize_t safe_read_line(int fd, char *buf, size_t max)
 
 int lockFile(int fd, short lockType)
 {
+    if (fd < 0)
+        return -1;
+        
     struct flock lock;
     memset(&lock, 0, sizeof(lock));
     lock.l_type = lockType; // F_WRLCK, F_RDLCK, or F_UNLCK
     lock.l_whence = SEEK_SET;
     lock.l_start = 0;
     lock.l_len = 0;                    // Lock entire file
-    return fcntl(fd, F_SETLKW, &lock); // Wait until lock is acquired
+    int result = fcntl(fd, F_SETLKW, &lock); // Wait until lock is acquired
+    if (result == -1 && errno != EINTR)
+    {
+        // Lock failed
+        return -1;
+    }
+    return result;
 }
 
 // ---------------------
@@ -125,6 +150,7 @@ int updateBalance(const int userId, float newBalance)
     Cust customers[500];
     int count = 0;
 
+    int changed = 0;
     while (count < 500 && fscanf(fp, "%d %49s %49s %f %9s",
                                  &customers[count].id,
                                  customers[count].uname,
@@ -133,21 +159,46 @@ int updateBalance(const int userId, float newBalance)
                                  customers[count].status) == 5)
     {
         if (customers[count].id == userId)
+        {
             customers[count].bal = newBalance;
+            changed = 1;
+        }
         count++;
     }
+    
+    if (ferror(fp))
+    {
+        fclose(fp);
+        return 0;
+    }
     fclose(fp);
+
+    if (!changed)
+        return 0;
 
     fp = fopen(CUSTOMER_FILE, "w");
     if (!fp)
         return 0;
+    
     for (int i = 0; i < count; i++)
-        fprintf(fp, "%d %s %s %.2f %s\n",
-                customers[i].id,
-                customers[i].uname,
-                customers[i].pass,
-                customers[i].bal,
-                customers[i].status);
+    {
+        if (fprintf(fp, "%d %s %s %.2f %s\n",
+                    customers[i].id,
+                    customers[i].uname,
+                    customers[i].pass,
+                    customers[i].bal,
+                    customers[i].status) < 0)
+        {
+            fclose(fp);
+            return 0;
+        }
+    }
+    
+    if (fflush(fp) != 0 || ferror(fp))
+    {
+        fclose(fp);
+        return 0;
+    }
     fclose(fp);
     return 1;
 }
@@ -162,20 +213,45 @@ int appendTransaction(const char *username, const char *type, float amount, floa
         return 0;
 
     struct timeval tv;
-    gettimeofday(&tv, NULL);
+    if (gettimeofday(&tv, NULL) != 0)
+    {
+        perror("gettimeofday failed");
+        fclose(fp);
+        return 0;
+    }
+    
     char timestr[64];
     struct tm *tm_info = localtime(&tv.tv_sec);
-    strftime(timestr, sizeof(timestr), "%Y-%m-%d_%H:%M:%S", tm_info);
+    if (!tm_info)
+    {
+        fclose(fp);
+        return 0;
+    }
+    
+    if (strftime(timestr, sizeof(timestr), "%Y-%m-%d_%H:%M:%S", tm_info) == 0)
+    {
+        fclose(fp);
+        return 0;
+    }
+    
+    int result = 0;
     if (userId)
     {
-        fprintf(fp, "TXN_%ld %s %s %.2f %s %.2f %d\n",
-                tv.tv_sec, username, type, amount, timestr, balance_after, userId);
+        result = fprintf(fp, "TXN_%ld %s %s %.2f %s %.2f %d\n",
+                        tv.tv_sec, username, type, amount, timestr, balance_after, userId);
     }
     else
     {
-        fprintf(fp, "TXN_%ld %s %s %.2f %s %.2f\n",
-                tv.tv_sec, username, type, amount, timestr, balance_after);
+        result = fprintf(fp, "TXN_%ld %s %s %.2f %s %.2f\n",
+                        tv.tv_sec, username, type, amount, timestr, balance_after);
     }
+    
+    if (result < 0 || fflush(fp) != 0 || ferror(fp))
+    {
+        fclose(fp);
+        return 0;
+    }
+    
     fclose(fp);
     return 1;
 }
@@ -280,20 +356,46 @@ int transferFunds(const char *fromUser, const int toUserId,
     *toNewBal = customers[toIdx].bal;
 
     // ---- Rewrite using same fd (avoid freopen) ----
-    ftruncate(fd, 0);       // clear old data
-    lseek(fd, 0, SEEK_SET); // go to start
+    if (ftruncate(fd, 0) != 0)
+    {
+        perror("ftruncate failed");
+        lock.l_type = F_UNLCK;
+        fcntl(fd, F_SETLK, &lock);
+        fclose(fp);
+        return 0;
+    }
+    
+    if (lseek(fd, 0, SEEK_SET) == -1)
+    {
+        perror("lseek failed");
+        lock.l_type = F_UNLCK;
+        fcntl(fd, F_SETLK, &lock);
+        fclose(fp);
+        return 0;
+    }
 
     for (int i = 0; i < count; i++)
     {
-        dprintf(fd, "%d %s %s %.2f %s\n",
-                customers[i].id,
-                customers[i].uname,
-                customers[i].pass,
-                customers[i].bal,
-                customers[i].status);
+        if (dprintf(fd, "%d %s %s %.2f %s\n",
+                    customers[i].id,
+                    customers[i].uname,
+                    customers[i].pass,
+                    customers[i].bal,
+                    customers[i].status) < 0)
+        {
+            perror("dprintf failed");
+            lock.l_type = F_UNLCK;
+            fcntl(fd, F_SETLK, &lock);
+            fclose(fp);
+            return 0;
+        }
     }
 
-    fsync(fd); // ensure data durability
+    if (fsync(fd) != 0)
+    {
+        perror("fsync failed");
+        // Continue anyway - data might be written
+    }
 
     // ---- Unlock file ----
     lock.l_type = F_UNLCK;

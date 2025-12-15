@@ -68,7 +68,8 @@ int addSession(const char *userId, const char *role)
             {
                 if (db_id == id)
                 {
-                    strcpy(name, uname);
+                    strncpy(name, uname, sizeof(name) - 1);
+                    name[sizeof(name) - 1] = '\0';
                     break;
                 }
             }
@@ -80,16 +81,27 @@ int addSession(const char *userId, const char *role)
             {
                 if (db_id == id)
                 {
-                    strcpy(name, uname);
+                    strncpy(name, uname, sizeof(name) - 1);
+                    name[sizeof(name) - 1] = '\0';
                     break;
                 }
             }
         }
 
+        if (ferror(db))
+        {
+            fclose(db);
+            fclose(fp);
+            return 0;
+        }
         fclose(db);
     }
 
-    fprintf(fp, "%s %s %s\n", userId, name, role);
+    if (fprintf(fp, "%s %s %s\n", userId, name, role) < 0 || fflush(fp) != 0 || ferror(fp))
+    {
+        fclose(fp);
+        return 0;
+    }
     fclose(fp);
     return 1;
 }
@@ -114,13 +126,47 @@ int removeSession(const char *userId)
     while (fscanf(fp, "%63s %63s %31s", id, uname, role) == 3)
     {
         if (strcmp(id, userId) != 0)
-            fprintf(temp, "%s %s %s\n", id, uname, role);
+        {
+            if (fprintf(temp, "%s %s %s\n", id, uname, role) < 0)
+            {
+                fclose(fp);
+                fclose(temp);
+                remove(TEMP_SESSION_FILE);
+                return 0;
+            }
+        }
+    }
+
+    if (ferror(fp))
+    {
+        fclose(fp);
+        fclose(temp);
+        remove(TEMP_SESSION_FILE);
+        return 0;
+    }
+
+    if (fflush(temp) != 0 || ferror(temp))
+    {
+        fclose(fp);
+        fclose(temp);
+        remove(TEMP_SESSION_FILE);
+        return 0;
     }
 
     fclose(fp);
     fclose(temp);
-    remove(SESSION_FILE);
-    rename(TEMP_SESSION_FILE, SESSION_FILE);
+    
+    if (remove(SESSION_FILE) != 0)
+    {
+        remove(TEMP_SESSION_FILE);
+        return 0;
+    }
+    
+    if (rename(TEMP_SESSION_FILE, SESSION_FILE) != 0)
+    {
+        return 0;
+    }
+    
     return 1;
 }
 

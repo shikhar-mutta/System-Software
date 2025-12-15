@@ -25,6 +25,7 @@
 #include <stddef.h>
 #include <sys/file.h>
 #include <sys/socket.h>
+#include <errno.h>
 
 // =========================================================
 // 📂 File Paths
@@ -61,19 +62,34 @@ static void trim(char *s)
 static void safe_send(int fd, const char *msg)
 {
     if (msg && fd >= 0)
-        send(fd, msg, strlen(msg), 0);
+    {
+        ssize_t sent = send(fd, msg, strlen(msg), 0);
+        if (sent < 0 && errno != EPIPE && errno != ECONNRESET)
+        {
+            // Log error but don't crash - connection might be closed
+        }
+    }
 }
 
 // Read line safely from socket
 static int read_line(int fd, char *buf, size_t maxlen)
 {
+    if (!buf || maxlen == 0 || fd < 0)
+        return -1;
+        
     size_t total = 0;
     while (total < maxlen - 1)
     {
         char c;
         ssize_t n = recv(fd, &c, 1, 0);
         if (n <= 0)
-            return -1;
+        {
+            if (n == 0)
+                return 0; // Connection closed
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+                continue; // Retry
+            return -1; // Error
+        }
         if (c == '\n' || c == '\r')
             break;
         buf[total++] = c;
